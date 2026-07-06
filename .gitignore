@@ -1,0 +1,22 @@
+# Secrets & sessions — NEVER commit
+.env
+.env.*
+!.env.example
+.txline-session.json
+*.keypair.json
+wallet*.json
+id.json
+
+# Node
+node_modules/
+.next/
+dist/
+build/
+
+# Captured live data (large; regenerate)
+replay-*.jsonl
+
+# OS / editor
+.DS_Store
+*.log
+.vscode/
