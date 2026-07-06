@@ -12,6 +12,7 @@
 // live capture lands. MOCK mode exercises the full union at full fidelity meanwhile.
 
 import type {
+  LookUp,
   MatchEvent,
   PossessionType,
   Side,
@@ -118,6 +119,13 @@ export class Normalizer {
   private possessionType: PossessionType = null;
   private clock = 0;
 
+  // Rules-engine state (FR-L1 secondary/tertiary sources + frequency cap).
+  private dangerStreak = 0;
+  private dangerSide: Side = null;
+  private lastSwingShare = 0.5;
+  private lastLookupClock = -1e9;
+  private static readonly LOOKUP_GAP_SECONDS = 25; // anti-spam between engine lookups
+
   constructor(readonly fixtureId: number) {}
 
   /** True when a raw object is just a keepalive (`{Ts: ...}` or empty of match keys). */
@@ -159,7 +167,27 @@ export class Normalizer {
           source: 'possible',
           clock: this.clock,
         });
+        this.lastLookupClock = this.clock; // primary fires; secondary/tertiary respect the gap
       }
+    }
+
+    // Secondary source: sustained Danger/HighDanger on one side → "something building".
+    if (this.possessionType === 'Danger' || this.possessionType === 'HighDanger') {
+      if (this.dangerSide === this.possession) this.dangerStreak += 1;
+      else {
+        this.dangerStreak = 1;
+        this.dangerSide = this.possession;
+      }
+      if (this.dangerStreak >= 2) {
+        const lk = this.engineLookup('danger', this.possession, 'goal');
+        if (lk) {
+          out.push(lk);
+          this.dangerStreak = 0;
+        }
+      }
+    } else {
+      this.dangerStreak = 0;
+      this.dangerSide = null;
     }
 
     // Data.Action -> a real MatchEvent.
@@ -195,7 +223,25 @@ export class Normalizer {
     if (!pcts) return [];
     this.p1Pct = pcts.p1;
     this.p2Pct = pcts.p2;
-    return [this.surge()];
+
+    const out: UnionEvent[] = [];
+    // Tertiary source: a sharp swing in the market's belief → it senses danger.
+    const share = this.p1Pct / (this.p1Pct + this.p2Pct || 1);
+    if (Math.abs(share - this.lastSwingShare) >= 0.06) {
+      const lk = this.engineLookup('swing', share > this.lastSwingShare ? 1 : 2, 'goal');
+      if (lk) out.push(lk);
+    }
+    this.lastSwingShare = share;
+
+    out.push(this.surge());
+    return out;
+  }
+
+  /** Emit an engine (secondary/tertiary) lookup, honoring the frequency cap. */
+  private engineLookup(source: 'danger' | 'swing', side: Side, kind: 'goal'): LookUp | null {
+    if (this.clock - this.lastLookupClock < Normalizer.LOOKUP_GAP_SECONDS) return null;
+    this.lastLookupClock = this.clock;
+    return { type: 'lookup', fixtureId: this.fixtureId, kind, side, source, clock: this.clock };
   }
 
   /** Feed pre-computed values (MOCK / tests) and get a surge tick. */

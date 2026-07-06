@@ -5,13 +5,14 @@ import { useNation } from '../lib/nation';
 import { useRelay } from '../lib/relay';
 import { DEFAULT_MODE, DEMO_FIXTURE_ID, PARTICIPANTS } from '../lib/config';
 import { SurgeBar } from './SurgeBar';
+import { LookUpLayer } from './LookUp';
 
 // Phase 2 SURGE home: a signed-in user watching live/replayed/mock ticks arrive.
 // Deliberately MVP — Phase 3 adds interpolation/haptics, Phase 4 the LOOK-UP hero.
 export function SurgeHome() {
   const { logout, walletAddress } = useAuth();
   const { nation, clearNation } = useNation();
-  const { status, surge, lookup, score, tickCount } = useRelay(DEMO_FIXTURE_ID, DEFAULT_MODE);
+  const { status, surge, lookup, lastEvent, score, tickCount } = useRelay(DEMO_FIXTURE_ID, DEFAULT_MODE);
 
   return (
     <main className="min-h-dvh flex flex-col px-5 py-4 gap-6">
@@ -41,12 +42,8 @@ export function SurgeHome() {
         <SurgeBar tick={surge} names={{ 1: PARTICIPANTS[1].name, 2: PARTICIPANTS[2].name }} />
       </div>
 
-      {/* LOOK-UP banner (basic; the hero interrupt comes in Phase 4) */}
-      {lookup && (
-        <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-center text-amber-300">
-          ⚡ Look up — {lookup.playerName ?? PARTICIPANTS[lookup.side ?? 1].name} · {lookup.kind} incoming
-        </div>
-      )}
+      {/* LOOK-UP hero — full-screen interrupt + resolution */}
+      <LookUpLayer lookup={lookup} lastEvent={lastEvent} />
 
       {/* footer: proves ticks arriving + wallet exists (Gate 2) */}
       <footer className="text-center text-[11px] text-neutral-600 space-y-0.5">

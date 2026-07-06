@@ -3,6 +3,7 @@
 
 import { MockSource } from './sources/mock.js';
 import { ReplaySource } from './sources/replay.js';
+import { Normalizer } from './normalize.js';
 import type { UnionEvent } from './types.js';
 
 function collect(source: { run(sink: (e: UnionEvent) => void): Promise<void> }): Promise<UnionEvent[]> {
@@ -48,10 +49,31 @@ async function verifyReplayDeterminism(): Promise<void> {
   console.log(`✅ REPLAY: deterministic across 2 runs — ${a.length} events, possession→surge, possibleEvent→lookup(side ${lookup && lookup.type === 'lookup' ? lookup.side : '?'}), goal→event ✓`);
 }
 
+function verifyRulesEngine(): void {
+  const n = new Normalizer(1);
+  const lookups: UnionEvent[] = [];
+  const collect = (evs: UnionEvent[]) => lookups.push(...evs.filter((e) => e.type === 'lookup'));
+
+  // Secondary: two sustained HighDanger/Danger ticks on side 2 → a 'danger' lookup.
+  collect(n.ingestScores({ Clock: { Seconds: 100 }, Possession: 'Participant2', PossessionType: 'HighDangerPossession' }));
+  collect(n.ingestScores({ Clock: { Seconds: 105 }, Possession: 'Participant2', PossessionType: 'DangerPossession' }));
+  // Advance clock past the frequency cap, then a sharp odds swing → a 'swing' lookup.
+  collect(n.ingestScores({ Clock: { Seconds: 140 }, Possession: 'Participant1', PossessionType: 'SafePossession' }));
+  collect(n.ingestOdds([{ SuperOddsType: '1X2', Outcome: '1', Pct: 0.7 }, { SuperOddsType: '1X2', Outcome: '2', Pct: 0.2 }]));
+
+  const sources = new Set(lookups.map((l) => (l.type === 'lookup' ? l.source : '')));
+  if (!sources.has('danger')) fail('rules engine: sustained danger did not emit a danger lookup');
+  if (!sources.has('swing')) fail('rules engine: sharp odds swing did not emit a swing lookup');
+  const danger = lookups.find((l) => l.type === 'lookup' && l.source === 'danger');
+  if (danger && danger.type === 'lookup' && danger.side !== 2) fail('rules engine: danger lookup wrong side');
+  console.log(`✅ RULES: multi-source — sources fired: ${[...sources].join(', ')} (FR-L1 secondary+tertiary)`);
+}
+
 async function main(): Promise<void> {
-  console.log('— Gate 1 headless verification —');
+  console.log('— Gate 1 + Gate 4 headless verification —');
   await verifyMock();
   await verifyReplayDeterminism();
+  verifyRulesEngine();
   console.log('✅ ALL PASS');
 }
 
