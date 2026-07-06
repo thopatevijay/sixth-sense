@@ -1,0 +1,100 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SIXTH SENSE relay — mode-agnostic client</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: #0b0e14; color: #d7dce5; }
+  header { padding: 12px 16px; border-bottom: 1px solid #1e2430; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  h1 { font-size: 15px; margin: 0; color: #fff; letter-spacing: .5px; }
+  select, input, button { font: inherit; background: #131926; color: #d7dce5; border: 1px solid #2a3242; border-radius: 6px; padding: 5px 8px; }
+  button { cursor: pointer; }
+  #status { margin-left: auto; padding: 3px 10px; border-radius: 999px; font-size: 12px; }
+  .on { background: #0f3d24; color: #4ade80; } .off { background: #3d1f0f; color: #f59e0b; }
+  .stage { padding: 16px; display: grid; gap: 14px; }
+  /* SURGE bar — directional, no numbers (matches the design intent) */
+  .bar { position: relative; height: 34px; border-radius: 8px; overflow: hidden; background: #131926; border: 1px solid #2a3242; }
+  .p1 { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #2563eb, #3b82f6); transition: width .5s cubic-bezier(.22,1,.36,1); }
+  .p2 { position: absolute; inset: 0 0 0 auto; background: linear-gradient(270deg, #dc2626, #ef4444); transition: width .5s cubic-bezier(.22,1,.36,1); }
+  .micro { text-align: center; font-size: 13px; color: #9aa4b2; min-height: 18px; }
+  #lookup { padding: 14px; border-radius: 10px; background: #171207; border: 1px solid #3d2f0f; color: #fbbf24; text-align: center; font-size: 16px; opacity: .35; transition: opacity .2s, transform .2s; }
+  #lookup.fire { opacity: 1; transform: scale(1.02); box-shadow: 0 0 0 2px #f59e0b55; }
+  #log { padding: 0 16px 16px; }
+  #log div { border-bottom: 1px solid #141a24; padding: 3px 0; white-space: pre-wrap; word-break: break-all; }
+  .t-surge { color: #7f8ea3; } .t-lookup { color: #fbbf24; } .t-event { color: #4ade80; } .t-heartbeat { color: #3a4252; } .t-ready { color: #60a5fa; }
+  .counts { font-size: 12px; color: #9aa4b2; }
+</style>
+
+<header>
+  <h1>◎ SIXTH SENSE relay</h1>
+  <label>mode <select id="mode"><option value="mock">mock</option><option value="replay">replay</option><option value="live">live</option></select></label>
+  <label>fixtureId <input id="fid" value="18198205" size="10" /></label>
+  <button id="go">connect</button>
+  <span class="counts" id="counts"></span>
+  <span id="status" class="off">disconnected</span>
+</header>
+
+<div class="stage">
+  <div class="bar"><div class="p1" id="p1"></div><div class="p2" id="p2"></div></div>
+  <div class="micro" id="micro">—</div>
+  <div id="lookup">look-up feed idle</div>
+</div>
+
+<div id="log"></div>
+
+<script>
+  // NOTE: this client is deliberately MODE-AGNOSTIC. Nothing below branches on live/replay/mock —
+  // it consumes the same union contract regardless. That is exactly what Gate 1 requires.
+  const $ = (id) => document.getElementById(id);
+  const RELAY = location.origin; // served from the relay itself
+  let es = null;
+  const counts = { surge: 0, lookup: 0, event: 0, heartbeat: 0 };
+
+  const SIDE = { 1: 'P1', 2: 'P2', null: '—' };
+
+  function log(ev) {
+    const el = document.createElement('div');
+    el.className = 't-' + ev.type;
+    el.textContent = new Date().toISOString().slice(11, 23) + '  ' + JSON.stringify(ev);
+    $('log').prepend(el);
+    while ($('log').childElementCount > 200) $('log').lastChild.remove();
+  }
+
+  function renderSurge(ev) {
+    // Two-sided directional bar; widths scaled so the favoured side visibly dominates.
+    const total = ev.p1Pct + ev.p2Pct || 1;
+    $('p1').style.width = (ev.p1Pct / total * 100) + '%';
+    $('p2').style.width = (ev.p2Pct / total * 100) + '%';
+    const lead = ev.p1Pct === ev.p2Pct ? 'level' : (ev.p1Pct > ev.p2Pct ? 'P1 surging' : 'P2 surging');
+    $('micro').textContent = `${lead}${ev.possessionType ? ' · ' + ev.possessionType : ''}`;
+  }
+
+  function fireLookup(ev) {
+    const who = ev.playerName || SIDE[ev.side];
+    $('lookup').textContent = `⚡ Look up — ${who} · ${ev.kind} incoming`;
+    $('lookup').classList.add('fire');
+    setTimeout(() => $('lookup').classList.remove('fire'), 2500);
+  }
+
+  function handle(ev) {
+    if (ev.type in counts) counts[ev.type]++;
+    $('counts').textContent = `surge ${counts.surge} · lookup ${counts.lookup} · event ${counts.event} · hb ${counts.heartbeat}`;
+    if (ev.type === 'surge') renderSurge(ev);
+    else if (ev.type === 'lookup') fireLookup(ev);
+    if (ev.type !== 'heartbeat') log(ev);
+  }
+
+  function connect() {
+    if (es) es.close();
+    Object.keys(counts).forEach((k) => (counts[k] = 0));
+    const url = `${RELAY}/stream?fixtureId=${encodeURIComponent($('fid').value)}&mode=${$('mode').value}`;
+    es = new EventSource(url);
+    es.onopen = () => { $('status').textContent = 'connected · ' + $('mode').value; $('status').className = 'on'; };
+    es.onerror = () => { $('status').textContent = 'reconnecting…'; $('status').className = 'off'; };
+    es.addEventListener('ready', (e) => log({ type: 'ready', ...JSON.parse(e.data) }));
+    es.onmessage = (e) => { try { handle(JSON.parse(e.data)); } catch {} };
+  }
+
+  $('go').onclick = connect;
+  connect();
+</script>
