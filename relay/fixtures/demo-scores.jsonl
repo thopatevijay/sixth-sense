@@ -1,0 +1,8 @@
+{"Ts":1783300000}
+{"Ts":1783300001,"Clock":{"Running":true,"Seconds":600},"Possession":"Participant1","PossessionType":"AttackPossession"}
+{"Ts":1783300003,"Clock":{"Running":true,"Seconds":602},"Possession":"Participant1","PossessionType":"HighDangerPossession"}
+{"Ts":1783300004,"Clock":{"Running":true,"Seconds":603},"SoccerPossiblePartiEvent":{"Participant1":{"Goal":true}}}
+{"Ts":1783300006,"Clock":{"Running":true,"Seconds":605},"Data":{"Action":"goal","Participant":"Participant1","PlayerId":100},"Score":{"Participant1":{"Goals":1},"Participant2":{"Goals":0}}}
+{"Ts":1783300010,"Clock":{"Running":true,"Seconds":609},"Possession":"Participant2","PossessionType":"SafePossession"}
+{"Ts":1783300014,"Clock":{"Running":true,"Seconds":613},"SoccerPossibleNeutralEvent":{"YellowCard":true}}
+{"Ts":1783300016,"Clock":{"Running":true,"Seconds":615},"Data":{"Action":"yellowcard","Participant":"Participant2","PlayerId":201},"Score":{"Participant1":{"Goals":1},"Participant2":{"Goals":0}}}
