@@ -43,21 +43,42 @@ function num(v: unknown): number | undefined {
   return typeof n === 'number' && Number.isFinite(n) ? n : undefined;
 }
 
-/** Deep-scan for possibleEvent flag groups (mirrors scripts/txline-capture.mjs findPossible). */
-function findPossibleFlags(obj: unknown, path = ''): Array<{ path: string; flags: string[] }> {
-  const hits: Array<{ path: string; flags: string[] }> = [];
-  if (obj && typeof obj === 'object') {
-    for (const [k, v] of Object.entries(obj)) {
+/**
+ * Deep-scan for possibleEvent flag groups. Handles both plausible layouts:
+ *   flat:        { SoccerPossiblePartiEvent: { Goal: true, Penalty: true } }
+ *   per-team:    { SoccerPossiblePartiEvent: { Participant1: { Goal: true } } }
+ * Returns one hit per (event group, side), with `side` derived from a participant key.
+ */
+function findPossibleFlags(obj: unknown): Array<{ side: Side; flags: string[] }> {
+  const hits: Array<{ side: Side; flags: string[] }> = [];
+  const walk = (o: unknown): void => {
+    if (!o || typeof o !== 'object') return;
+    for (const [k, v] of Object.entries(o)) {
       if (/possible.*event/i.test(k) && v && typeof v === 'object') {
-        const flags = Object.entries(v as Json)
-          .filter(([, val]) => val === true)
-          .map(([kk]) => kk);
-        if (flags.length) hits.push({ path: `${path}${k}`, flags });
+        const flat = Object.entries(v as Json).filter(([, val]) => val === true).map(([kk]) => kk);
+        if (flat.length) hits.push({ side: parseSide(k) ?? sideFromFlags(flat), flags: flat });
+        for (const [sub, subVal] of Object.entries(v as Json)) {
+          if (subVal && typeof subVal === 'object') {
+            const nested = Object.entries(subVal as Json).filter(([, val]) => val === true).map(([kk]) => kk);
+            if (nested.length) hits.push({ side: parseSide(sub), flags: nested });
+          }
+        }
+      } else if (v && typeof v === 'object') {
+        walk(v);
       }
-      if (v && typeof v === 'object') hits.push(...findPossibleFlags(v, `${path}${k}.`));
     }
-  }
+  };
+  walk(obj);
   return hits;
+}
+
+/** Some feeds encode the participant inside the flag name (e.g. "Goal_Participant2"). */
+function sideFromFlags(flags: string[]): Side {
+  for (const f of flags) {
+    const s = parseSide(f);
+    if (s) return s;
+  }
+  return null;
 }
 
 /** Map a possibleEvent flag name to a LOOK-UP kind. Corner -> null (not a hero kind). */
@@ -127,7 +148,6 @@ export class Normalizer {
 
     // possibleEvent imminent flags -> LOOK-UP (primary source).
     for (const hit of findPossibleFlags(obj)) {
-      const side = /participant2|away/i.test(hit.path) ? 2 : /participant1|home/i.test(hit.path) ? 1 : null;
       for (const flag of hit.flags) {
         const kind = flagToKind(flag);
         if (!kind || kind === 'corner') continue;
@@ -135,7 +155,7 @@ export class Normalizer {
           type: 'lookup',
           fixtureId: this.fixtureId,
           kind: kind as 'goal' | 'penalty' | 'card' | 'var',
-          side,
+          side: hit.side,
           source: 'possible',
           clock: this.clock,
         });
