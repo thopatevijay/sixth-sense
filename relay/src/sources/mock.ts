@@ -76,6 +76,13 @@ export class MockSource implements Source {
     return new Promise((resolve) => {
       const started = Date.now();
       const scheduled = new Set<Moment>();
+      // The match "ends" at durationMs, but the promise must not resolve until the last
+      // scheduled event has landed (late LOOK-UPs resolve after the final whistle-clock).
+      const latestEventMs = Math.max(this.durationMs, ...SCENARIO.map((m) => m.at * this.durationMs + m.leadMs));
+      this.after(latestEventMs + 150, () => {
+        sink({ type: 'heartbeat', ts: Date.now() });
+        resolve();
+      });
 
       // Schedule the scripted LOOK-UP / event pairs.
       for (const m of SCENARIO) {
@@ -97,8 +104,8 @@ export class MockSource implements Source {
             source: m.source,
             clock,
           });
-          // The real event lands after the lead time.
-          this.after(lookupAt + m.leadMs, () => {
+          // The real event lands after the lead time (relative to this LOOK-UP firing).
+          this.after(m.leadMs, () => {
             if (m.scoreDelta === 1) this.score.p1 += 1;
             else if (m.scoreDelta === 2) this.score.p2 += 1;
             sink({
@@ -119,11 +126,9 @@ export class MockSource implements Source {
       const tick = () => {
         if (this.stopped) return;
         const elapsed = Date.now() - started;
-        if (elapsed >= this.durationMs) {
-          sink({ type: 'heartbeat', ts: Date.now() });
-          resolve();
-          return;
-        }
+        // Match clock is over: stop emitting SURGE, but let the end timer resolve
+        // AFTER the last scheduled event lands (a late LOOK-UP resolves post-whistle).
+        if (elapsed >= this.durationMs) return;
         this.step(elapsed / this.durationMs);
         const clock = Math.round((elapsed / this.durationMs) * MATCH_SECONDS);
         sink(this.norm.setSurge(this.p1, this.p2, this.possession(), this.possessionType(), clock));
