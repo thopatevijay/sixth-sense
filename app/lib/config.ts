@@ -13,3 +13,6 @@ export const PARTICIPANTS = {
   1: { name: 'France', short: 'FRA', flag: '🇫🇷' },
   2: { name: 'Brazil', short: 'BRA', flag: '🇧🇷' },
 } as const;
+
+/** Fallback star player per side when a LOOK-UP arrives without a named player. */
+export const STAR_PLAYER = { 1: 'Mbappé', 2: 'Vinícius Jr' } as const;
