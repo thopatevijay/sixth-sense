@@ -1,8 +1,10 @@
 'use client';
 
-// Nation/team pick, persisted to localStorage so it survives reload (FR-A3 AC).
+// Nation/team pick, persisted to localStorage so it survives reload (FR-A3 AC) and stays in
+// sync across every screen (via the shared store).
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useMemo } from 'react';
+import { usePersistentRaw } from './store';
 
 export interface Nation {
   code: string;
@@ -25,30 +27,19 @@ export const NATIONS: Nation[] = [
 const KEY = 'sixthsense.nation';
 
 export function useNation() {
-  const [nation, setNationState] = useState<Nation | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const { value, set, mounted } = usePersistentRaw(KEY);
 
-  useEffect(() => {
-    const raw = localStorage.getItem(KEY);
-    if (raw) {
-      try {
-        setNationState(JSON.parse(raw) as Nation);
-      } catch {
-        /* ignore corrupt value */
-      }
+  const nation = useMemo<Nation | null>(() => {
+    if (!value) return null;
+    try {
+      return JSON.parse(value) as Nation;
+    } catch {
+      return null;
     }
-    setLoaded(true);
-  }, []);
+  }, [value]);
 
-  const setNation = useCallback((n: Nation) => {
-    localStorage.setItem(KEY, JSON.stringify(n));
-    setNationState(n);
-  }, []);
+  const setNation = useCallback((n: Nation) => set(JSON.stringify(n)), [set]);
+  const clearNation = useCallback(() => set(null), [set]);
 
-  const clearNation = useCallback(() => {
-    localStorage.removeItem(KEY);
-    setNationState(null);
-  }, []);
-
-  return { nation, setNation, clearNation, loaded };
+  return { nation, setNation, clearNation, loaded: mounted };
 }
