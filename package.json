@@ -1,0 +1,18 @@
+{
+  "name": "sixth-sense",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SIXTH SENSE — a real-time World Cup fan companion powered by TxLINE + Solana.",
+  "scripts": {
+    "auth": "node scripts/txline-auth.mjs",
+    "probe:snapshot": "node scripts/txline-probe.mjs --snapshot",
+    "probe:stream": "node scripts/txline-probe.mjs --stream",
+    "capture": "node scripts/txline-capture.mjs"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.95.0",
+    "@solana/spl-token": "^0.4.8",
+    "tweetnacl": "^1.0.3"
+  }
+}
