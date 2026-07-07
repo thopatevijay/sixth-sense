@@ -9,6 +9,7 @@ import { DEFAULT_MODE, DEMO_FIXTURE_ID, PARTICIPANTS } from '../lib/config';
 import { SurgeBar } from './SurgeBar';
 import { LookUpLayer } from './LookUp';
 import { MomentSheet } from './Moment';
+import { Leaderboard } from './Leaderboard';
 
 // SURGE home: the live loop — momentum bar, LOOK-UP hero, and the shareable Moment.
 export function SurgeHome() {
@@ -17,6 +18,7 @@ export function SurgeHome() {
   const { status, surge, lookup, lastEvent, score, tickCount } = useRelay(DEMO_FIXTURE_ID, DEFAULT_MODE);
   const { moment, standout } = useMomentTracker(surge, lastEvent, nation);
   const [showMoment, setShowMoment] = useState(false);
+  const [showBoard, setShowBoard] = useState(false);
 
   return (
     <main className="min-h-dvh flex flex-col px-5 py-4 gap-6">
@@ -26,13 +28,23 @@ export function SurgeHome() {
           <span className="text-lg">{nation?.flag ?? '🌍'}</span>
           <span className="text-neutral-400">{nation?.name ?? 'World'}</span>
         </span>
-        <span className="flex items-center gap-2">
+        <span className="flex items-center gap-3">
           <StatusDot status={status} />
+          <button onClick={() => setShowBoard(true)} className="text-neutral-500 hover:text-neutral-300" aria-label="Nations">
+            🏆
+          </button>
           <button onClick={() => { clearNation(); logout(); }} className="text-neutral-500 hover:text-neutral-300">
             sign out
           </button>
         </span>
       </header>
+
+      {/* transparent reconnect — the loop survives a network blip (NFR-2) */}
+      {status === 'reconnecting' && (
+        <div className="mx-auto rounded-full bg-amber-500/10 border border-amber-500/30 px-3 py-1 text-xs text-amber-300">
+          reconnecting…
+        </div>
+      )}
 
       {/* scoreline */}
       <div className="flex items-center justify-center gap-4 text-2xl font-bold">
@@ -63,6 +75,9 @@ export function SurgeHome() {
 
       {showMoment && (
         <MomentSheet moment={moment} walletAddress={walletAddress} onClose={() => setShowMoment(false)} />
+      )}
+      {showBoard && (
+        <Leaderboard nation={nation} myMoments={moment.witnessedGoals} onClose={() => setShowBoard(false)} />
       )}
 
       {/* footer: proves ticks arriving + wallet exists */}
