@@ -1,18 +1,22 @@
 'use client';
 
+import { useState } from 'react';
 import { useAuth } from '../lib/auth';
 import { useNation } from '../lib/nation';
 import { useRelay } from '../lib/relay';
+import { useMomentTracker } from '../lib/moment';
 import { DEFAULT_MODE, DEMO_FIXTURE_ID, PARTICIPANTS } from '../lib/config';
 import { SurgeBar } from './SurgeBar';
 import { LookUpLayer } from './LookUp';
+import { MomentSheet } from './Moment';
 
-// Phase 2 SURGE home: a signed-in user watching live/replayed/mock ticks arrive.
-// Deliberately MVP — Phase 3 adds interpolation/haptics, Phase 4 the LOOK-UP hero.
+// SURGE home: the live loop — momentum bar, LOOK-UP hero, and the shareable Moment.
 export function SurgeHome() {
   const { logout, walletAddress } = useAuth();
   const { nation, clearNation } = useNation();
   const { status, surge, lookup, lastEvent, score, tickCount } = useRelay(DEMO_FIXTURE_ID, DEFAULT_MODE);
+  const { moment, standout } = useMomentTracker(surge, lastEvent, nation);
+  const [showMoment, setShowMoment] = useState(false);
 
   return (
     <main className="min-h-dvh flex flex-col px-5 py-4 gap-6">
@@ -42,10 +46,26 @@ export function SurgeHome() {
         <SurgeBar tick={surge} names={{ 1: PARTICIPANTS[1].name, 2: PARTICIPANTS[2].name }} />
       </div>
 
+      {/* Your Moment — pulses when a standout swing makes it worth keeping */}
+      <button
+        onClick={() => setShowMoment(true)}
+        className={`mx-auto rounded-full px-5 py-2.5 text-sm font-medium border transition active:scale-[.97] ${
+          standout
+            ? 'border-amber-500/60 bg-amber-500/10 text-amber-300 animate-pulse'
+            : 'border-neutral-800 text-neutral-400'
+        }`}
+      >
+        ✨ Your Moment · Lvl {moment.level}
+      </button>
+
       {/* LOOK-UP hero — full-screen interrupt + resolution */}
       <LookUpLayer lookup={lookup} lastEvent={lastEvent} />
 
-      {/* footer: proves ticks arriving + wallet exists (Gate 2) */}
+      {showMoment && (
+        <MomentSheet moment={moment} walletAddress={walletAddress} onClose={() => setShowMoment(false)} />
+      )}
+
+      {/* footer: proves ticks arriving + wallet exists */}
       <footer className="text-center text-[11px] text-neutral-600 space-y-0.5">
         <div>{tickCount} ticks · {DEFAULT_MODE} · clock {formatClock(surge?.clock ?? 0)}</div>
         {walletAddress && <div className="truncate">wallet {walletAddress.slice(0, 6)}…{walletAddress.slice(-4)}</div>}
