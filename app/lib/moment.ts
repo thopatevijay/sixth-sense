@@ -60,11 +60,25 @@ export function useMomentTracker(
     setSwingPct((p) => (pct > p ? pct : p));
   }, [surge]);
 
-  // A newly-witnessed goal increments the persistent level.
+  // A newly-witnessed goal increments the persistent level + records to the nation board.
   useEffect(() => {
     if (!lastEvent || lastEvent.kind !== 'goal' || lastEvent === lastGoal.current) return;
     lastGoal.current = lastEvent;
     set(String(witnessedGoals + 1));
+    if (nation) {
+      void fetch('/api/leaderboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: nation.code,
+          name: nation.name,
+          flag: nation.flag,
+          kind: lastEvent.kind,
+          player: lastEvent.playerName,
+          clock: lastEvent.clock,
+        }),
+      }).catch(() => {}); // fire-and-forget; board degrades to seed on failure
+    }
   }, [lastEvent]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const moment = useMemo<Moment>(() => {
