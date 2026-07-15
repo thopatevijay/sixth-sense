@@ -29,7 +29,7 @@ export function SurgeHome() {
           <span className="text-neutral-400">{nation?.name ?? 'World'}</span>
         </span>
         <span className="flex items-center gap-3">
-          <StatusDot status={status} />
+          <StatusDot status={status} mode={DEFAULT_MODE} />
           <button onClick={() => setShowBoard(true)} className="text-neutral-500 hover:text-neutral-300" aria-label="Nations">
             🏆
           </button>
@@ -89,12 +89,16 @@ export function SurgeHome() {
   );
 }
 
-function StatusDot({ status }: { status: 'connecting' | 'live' | 'reconnecting' }) {
-  const color = status === 'live' ? 'bg-green-500' : status === 'reconnecting' ? 'bg-amber-500' : 'bg-neutral-500';
+function StatusDot({ status, mode }: { status: 'connecting' | 'live' | 'reconnecting'; mode: string }) {
+  const connected = status === 'live';
+  const color = connected ? 'bg-green-500' : status === 'reconnecting' ? 'bg-amber-500' : 'bg-neutral-500';
+  // The dot shows connection health; the label shows the DATA MODE, so a replay demo
+  // never mislabels itself as a live match. Only a true live feed pulses + reads "live".
+  const label = status === 'connecting' ? 'connecting' : status === 'reconnecting' ? 'reconnecting' : mode;
   return (
     <span className="flex items-center gap-1.5 text-neutral-500">
-      <span className={`h-2 w-2 rounded-full ${color} ${status === 'live' ? 'animate-pulse' : ''}`} />
-      {status}
+      <span className={`h-2 w-2 rounded-full ${color} ${connected && mode === 'live' ? 'animate-pulse' : ''}`} />
+      {label}
     </span>
   );
 }
