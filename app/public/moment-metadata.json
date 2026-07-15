@@ -1,0 +1,11 @@
+{
+  "name": "SIXTH SENSE Moment",
+  "symbol": "SIXTH",
+  "description": "A real-time World Cup moment witnessed live and verified on Solana. Powered by TxLINE.",
+  "image": "https://sixth-sense.vercel.app/moment-card.png",
+  "external_url": "https://sixth-sense.vercel.app",
+  "attributes": [
+    { "trait_type": "Type", "value": "Witnessed Moment" },
+    { "trait_type": "Competition", "value": "World Cup 2026" }
+  ]
+}
