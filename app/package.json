@@ -9,6 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@metaplex-foundation/mpl-bubblegum": "^5.0.2",
+    "@metaplex-foundation/umi": "^1.5.1",
+    "@metaplex-foundation/umi-bundle-defaults": "^1.5.1",
     "@privy-io/react-auth": "^3.33.1",
     "@solana-program/memo": "^0.10.0",
     "@types/pg": "^8.20.0",
