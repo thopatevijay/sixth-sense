@@ -62,11 +62,13 @@ export class ReplaySource implements Source {
       const raw = isEnvelope ? env.raw : parsed;
       const stream = isEnvelope && env.stream === 'odds' ? 'odds' : 'scores';
 
-      // Timing: prefer the envelope receive-time; else the payload's Ts (seconds).
+      // Timing: prefer the envelope receive-time; else the payload's Ts.
+      // Ts may be epoch ms (13 digits) or seconds (10 digits) — detect, don't assume.
+      const rawTs = (raw as { Ts?: number })?.Ts;
       const tMs = isEnvelope && typeof env.t === 'number'
         ? env.t
-        : typeof (raw as { Ts?: number })?.Ts === 'number'
-          ? (raw as { Ts: number }).Ts * 1000
+        : typeof rawTs === 'number'
+          ? (rawTs > 1e12 ? rawTs : rawTs * 1000)
           : null;
 
       let gapMs = DEFAULT_GAP_MS;
