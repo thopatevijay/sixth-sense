@@ -53,7 +53,15 @@ function handleStream(req: http.IncomingMessage, res: http.ServerResponse, url: 
   res.write(`event: ready\ndata: ${JSON.stringify({ mode, fixtureId })}\n\n`);
 
   const send = (ev: UnionEvent) => res.write(`data: ${JSON.stringify(ev)}\n\n`);
-  const unsubscribe = hub.subscribe(mode, fixtureId, send);
+  // A source that fails to start (e.g. missing session for LIVE) must NOT crash the server.
+  let unsubscribe: () => void = () => {};
+  try {
+    unsubscribe = hub.subscribe(mode, fixtureId, send);
+  } catch (err) {
+    res.write(`event: error\ndata: ${JSON.stringify({ message: (err as Error).message })}\n\n`);
+    res.end();
+    return;
+  }
   const keepalive = setInterval(() => res.write(`:ka\n\n`), KEEPALIVE_MS);
 
   const cleanup = () => {
