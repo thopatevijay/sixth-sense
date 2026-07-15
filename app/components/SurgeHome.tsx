@@ -55,7 +55,7 @@ export function SurgeHome() {
 
       {/* SURGE bar — self-animating (interpolation + micro-motion + swing feedback) */}
       <div className="flex-1 flex flex-col justify-center">
-        <SurgeBar tick={surge} names={{ 1: PARTICIPANTS[1].name, 2: PARTICIPANTS[2].name }} />
+        <SurgeBar tick={surge} names={{ 1: PARTICIPANTS[1].name, 2: PARTICIPANTS[2].name }} score={score} />
       </div>
 
       {/* Your Moment — pulses when a standout swing makes it worth keeping */}

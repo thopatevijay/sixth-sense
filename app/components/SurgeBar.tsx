@@ -15,13 +15,15 @@ import { playSwing, vibrate } from '../lib/feedback';
 interface Props {
   tick: SurgeTick | null;
   names: { 1: string; 2: string };
+  /** Live score — leans the bar when the feed has no odds `Pct` (scores-only capture). */
+  score?: { p1: number; p2: number };
 }
 
 const DANGER: Record<string, number> = { Safe: 0.1, Attack: 0.4, Danger: 0.75, HighDanger: 1 };
 const SWING_THRESHOLD = 0.045; // change in p1 share that reads as a momentum swing
 const EASE = 0.1; // how fast the bar chases the target (per frame)
 
-export function SurgeBar({ tick, names }: Props) {
+export function SurgeBar({ tick, names, score }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const p1 = useRef<HTMLDivElement>(null);
   const micro = useRef<HTMLParagraphElement>(null);
@@ -36,10 +38,20 @@ export function SurgeBar({ tick, names }: Props) {
   const swingDir = useRef<1 | 2 | null>(null);
   const prevTarget = useRef(0.5);
 
-  // Ingest a new odds/possession tick.
+  // Ingest a new tick → recompute the momentum TARGET.
+  // Momentum = odds when the feed has them, else the score baseline, always nudged toward
+  // whoever is attacking dangerously right now. So a scores-only replay still leans + surges.
   useEffect(() => {
     if (!tick) return;
-    const t = tick.p1Pct + tick.p2Pct > 0 ? tick.p1Pct / (tick.p1Pct + tick.p2Pct) : 0.5;
+    const oddsShare = tick.p1Pct + tick.p2Pct > 0 ? tick.p1Pct / (tick.p1Pct + tick.p2Pct) : 0.5;
+    const hasOdds = Math.abs(oddsShare - 0.5) > 0.005;
+    const diff = (score?.p1 ?? 0) - (score?.p2 ?? 0);
+    const scoreShare = 0.5 + Math.tanh(diff * 0.6) * 0.22; // 1-goal lead ≈ .62, 2 ≈ .68
+    const base = hasOdds ? oddsShare : scoreShare;
+    const dangerI = DANGER[tick.possessionType ?? 'Safe'] ?? 0.1;
+    const posLean = (tick.possession === 1 ? 1 : tick.possession === 2 ? -1 : 0) * dangerI * 0.16;
+    const t = clamp(base + posLean, 0.08, 0.92);
+
     const delta = t - prevTarget.current;
     if (Math.abs(delta) >= SWING_THRESHOLD) {
       swing.current = Math.min(1, Math.abs(delta) * 6);
@@ -50,16 +62,19 @@ export function SurgeBar({ tick, names }: Props) {
     prevTarget.current = t;
     target.current = t;
     possession.current = tick.possession;
-    intensity.current = DANGER[tick.possessionType ?? 'Safe'] ?? 0.1;
+    intensity.current = dangerI;
 
     if (micro.current) {
-      const leaderName = t === 0.5 ? null : t > 0.5 ? names[1] : names[2];
       const danger = tick.possessionType && tick.possessionType !== 'Safe' ? tick.possessionType : '';
-      micro.current.innerHTML = leaderName
-        ? `<span class="font-semibold text-neutral-100">${leaderName} surging</span>${danger ? ` <span class="text-amber-400">· ${danger}</span>` : ''}`
-        : `<span class="text-neutral-500">Level game</span>`;
+      const presser = dangerI >= 0.75 && tick.possession ? names[tick.possession] : null;
+      const leader = t > 0.53 ? names[1] : t < 0.47 ? names[2] : null;
+      micro.current.innerHTML = presser
+        ? `<span class="font-semibold text-neutral-100">${presser} pressing</span> <span class="text-amber-400">· ${danger}</span>`
+        : leader
+          ? `<span class="font-semibold text-neutral-100">${leader} surging</span>${danger ? ` <span class="text-amber-400">· ${danger}</span>` : ''}`
+          : `<span class="text-neutral-500">End to end</span>`;
     }
-  }, [tick, names]);
+  }, [tick, names, score]);
 
   // The animation loop.
   useEffect(() => {
@@ -75,7 +90,7 @@ export function SurgeBar({ tick, names }: Props) {
 
       // Breathe: a small oscillation biased toward the side in possession, scaled by danger.
       const amp = 0.004 + intensity.current * 0.018 + swing.current * 0.03;
-      const bias = (possession.current === 1 ? 1 : possession.current === 2 ? -1 : 0) * intensity.current * 0.02;
+      const bias = (possession.current === 1 ? 1 : possession.current === 2 ? -1 : 0) * intensity.current * 0.006;
       const frac = clamp(display.current + bias + Math.sin(phase.current) * amp, 0.04, 0.96);
 
       if (p1.current) {
