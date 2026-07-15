@@ -26,7 +26,7 @@ export interface SurgeTick {
 }
 
 /** Which upstream signal produced a LOOK-UP (for confidence + the demo frequency slide). */
-export type LookUpSource = 'possible' | 'danger' | 'swing';
+export type LookUpSource = 'possible' | 'shot' | 'danger' | 'swing';
 
 /** App-as-oracle alert: something high-leverage is imminent. The hero. Feeds LOOK-UP. */
 export interface LookUp {

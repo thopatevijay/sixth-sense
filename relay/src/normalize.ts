@@ -92,24 +92,53 @@ function flagToKind(flag: string): MatchEvent['kind'] | 'penalty' | null {
   return null; // corner and unknowns don't drive the hero alert
 }
 
-/** Map a scores Data.Action to a MatchEvent kind. */
+/** Map a top-level scores Action to a MatchEvent kind. */
 function actionToKind(action: string): MatchEvent['kind'] | null {
   const a = action.toLowerCase();
-  if (a.includes('goal')) return 'goal';
+  if (a.includes('goal') && !a.includes('kick')) return 'goal'; // exclude "goal_kick"
   if (a.includes('card')) return 'card';
-  if (a.includes('corner')) return 'corner';
-  if (a.includes('sub')) return 'sub';
-  if (a.includes('var')) return 'var';
+  if (a === 'corner') return 'corner'; // exclude "corner_kick"-style noise; exact match
+  if (a.includes('substitution') || a === 'sub') return 'sub';
+  if (a === 'var' || a === 'var_end') return 'var';
   return null;
+}
+
+/**
+ * The real stream encodes possession danger as the ACTION NAME, not a field:
+ * safe_possession / attack_possession / danger_possession / high_danger_possession.
+ */
+function actionToPossessionType(action: string): PossessionType {
+  const a = action.toLowerCase();
+  if (a.includes('high_danger')) return 'HighDanger';
+  if (a.includes('danger')) return 'Danger';
+  if (a.includes('attack')) return 'Attack';
+  if (a.includes('safe')) return 'Safe';
+  return null;
+}
+
+/** Best-effort scorer/actor id from PlayerStats ({ ParticipantN: { "<id>": {...} } }). */
+function firstPlayerId(obj: Json): number | undefined {
+  const ps = obj.PlayerStats as Json | undefined;
+  if (!ps) return undefined;
+  for (const part of Object.values(ps)) {
+    if (part && typeof part === 'object') {
+      const id = Object.keys(part as Json)[0];
+      const n = id ? Number(id) : NaN;
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return undefined;
 }
 
 function readScore(obj: Json): { p1: number; p2: number } | undefined {
   const s = obj.Score as Json | undefined;
-  if (!s) return undefined;
-  const p1 = num((s.Participant1 as Json)?.Goals ?? (s as Json).Participant1);
-  const p2 = num((s.Participant2 as Json)?.Goals ?? (s as Json).Participant2);
-  if (p1 === undefined || p2 === undefined) return undefined;
-  return { p1, p2 };
+  if (!s || (!('Participant1' in s) && !('Participant2' in s))) return undefined;
+  // Real shape: Participant2: { Total: { Goals: 2 } }. Fallback to a flat Goals/number.
+  const goals = (p: unknown): number => {
+    const part = p as Json | undefined;
+    return num((part?.Total as Json)?.Goals ?? part?.Goals ?? part) ?? 0;
+  };
+  return { p1: goals(s.Participant1), p2: goals(s.Participant2) };
 }
 
 export class Normalizer {
@@ -118,6 +147,7 @@ export class Normalizer {
   private possession: Side = null;
   private possessionType: PossessionType = null;
   private clock = 0;
+  private lastTotalGoals = 0; // goal dedup: the feed repeats `goal` frames per goal
 
   // Rules-engine state (FR-L1 secondary/tertiary sources + frequency cap).
   private dangerStreak = 0;
@@ -134,7 +164,11 @@ export class Normalizer {
     return keys.length === 0 || (keys.length === 1 && 'Ts' in obj);
   }
 
-  /** Ingest one raw scores-stream object. Returns 0+ union events. */
+  /** Ingest one raw scores-stream object. Returns 0+ union events.
+   *  Real feed shape (verified vs replay-18202701.jsonl): the event kind is the
+   *  TOP-LEVEL `Action`; possession danger is encoded IN the action name; `possible`
+   *  carries `Data:{Goal,Corner,Penalty}` booleans; `goal` repeats per goal (deduped
+   *  by score increment). */
   ingestScores(raw: unknown): UnionEvent[] {
     if (!raw || typeof raw !== 'object') return [];
     const obj = raw as Json;
@@ -144,9 +178,16 @@ export class Normalizer {
     const clk = num((obj.Clock as Json)?.Seconds);
     if (clk !== undefined) this.clock = clk;
 
+    const action = typeof obj.Action === 'string' ? obj.Action : undefined;
     let stateChanged = false;
-    if ('PossessionType' in obj) {
-      this.possessionType = parsePossessionType(obj.PossessionType);
+
+    // Possession danger — the real stream encodes it as the action name.
+    const fromAction = action ? actionToPossessionType(action) : null;
+    if (fromAction) {
+      this.possessionType = fromAction;
+      stateChanged = true;
+    } else if ('PossessionType' in obj) {
+      this.possessionType = parsePossessionType(obj.PossessionType); // snapshot shape
       stateChanged = true;
     }
     if ('Possession' in obj) {
@@ -154,8 +195,16 @@ export class Normalizer {
       stateChanged = true;
     }
 
-    // possibleEvent imminent flags -> LOOK-UP (primary source).
-    for (const hit of findPossibleFlags(obj)) {
+    // LOOK-UP primary: `possible` action → Data:{Goal,Corner,Penalty} booleans.
+    // (findPossibleFlags kept as a fallback for snapshot/nested layouts.)
+    const hits: Array<{ side: Side; flags: string[] }> = [];
+    if (action === 'possible') {
+      const d = (obj.Data as Json) ?? {};
+      const flags = ['Goal', 'Penalty', 'Corner'].filter((k) => d[k] === true);
+      if (flags.length) hits.push({ side: parseSide(obj.Participant), flags });
+    }
+    hits.push(...findPossibleFlags(obj));
+    for (const hit of hits) {
       for (const flag of hit.flags) {
         const kind = flagToKind(flag);
         if (!kind || kind === 'corner') continue;
@@ -167,8 +216,14 @@ export class Normalizer {
           source: 'possible',
           clock: this.clock,
         });
-        this.lastLookupClock = this.clock; // primary fires; secondary/tertiary respect the gap
+        this.lastLookupClock = this.clock; // primary fires; engine sources respect the gap
       }
+    }
+
+    // Multi-source: a shot is an imminent goal chance (frequency-capped).
+    if (action === 'shot') {
+      const lk = this.engineLookup('shot', parseSide(obj.Participant), 'goal');
+      if (lk) out.push(lk);
     }
 
     // Secondary source: sustained Danger/HighDanger on one side → "something building".
@@ -190,18 +245,32 @@ export class Normalizer {
       this.dangerSide = null;
     }
 
-    // Data.Action -> a real MatchEvent.
-    const data = obj.Data as Json | undefined;
-    const action = typeof data?.Action === 'string' ? data.Action : undefined;
+    // Real MatchEvent from the top-level Action. Goals deduped by score increment.
     if (action) {
       const kind = actionToKind(action);
-      if (kind) {
+      if (kind === 'goal') {
+        const score = readScore(obj);
+        const total = score ? score.p1 + score.p2 : undefined;
+        if (total !== undefined && total > this.lastTotalGoals) {
+          this.lastTotalGoals = total;
+          out.push({
+            type: 'event',
+            fixtureId: this.fixtureId,
+            kind: 'goal',
+            side: parseSide(obj.Participant),
+            playerId: firstPlayerId(obj),
+            score,
+            clock: this.clock,
+          });
+        }
+        // duplicate/confirmation goal frame → ignore
+      } else if (kind) {
         out.push({
           type: 'event',
           fixtureId: this.fixtureId,
           kind,
-          side: parseSide(data?.Participant ?? obj.Participant),
-          playerId: num(data?.PlayerId ?? data?.PlayerInId),
+          side: parseSide(obj.Participant),
+          playerId: firstPlayerId(obj) ?? num((obj.Data as Json)?.PlayerInId),
           score: readScore(obj),
           clock: this.clock,
         });
@@ -238,7 +307,7 @@ export class Normalizer {
   }
 
   /** Emit an engine (secondary/tertiary) lookup, honoring the frequency cap. */
-  private engineLookup(source: 'danger' | 'swing', side: Side, kind: 'goal'): LookUp | null {
+  private engineLookup(source: 'danger' | 'swing' | 'shot', side: Side, kind: 'goal'): LookUp | null {
     if (this.clock - this.lastLookupClock < Normalizer.LOOKUP_GAP_SECONDS) return null;
     this.lastLookupClock = this.clock;
     return { type: 'lookup', fixtureId: this.fixtureId, kind, side, source, clock: this.clock };
