@@ -14,14 +14,10 @@ export interface Nation {
   side: 1 | 2;
 }
 
-// Demo fixture is France (P1) vs Brazil (P2) — matches the MOCK hero-arc players.
+// Demo fixture is Argentina (P1) vs Egypt (P2) — follow your team in the live match.
 export const NATIONS: Nation[] = [
-  { code: 'FR', name: 'France', flag: '🇫🇷', side: 1 },
-  { code: 'BR', name: 'Brazil', flag: '🇧🇷', side: 2 },
   { code: 'AR', name: 'Argentina', flag: '🇦🇷', side: 1 },
-  { code: 'ES', name: 'Spain', flag: '🇪🇸', side: 2 },
-  { code: 'PT', name: 'Portugal', flag: '🇵🇹', side: 1 },
-  { code: 'EN', name: 'England', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', side: 2 },
+  { code: 'EG', name: 'Egypt', flag: '🇪🇬', side: 2 },
 ];
 
 const KEY = 'sixthsense.nation';
@@ -32,7 +28,9 @@ export function useNation() {
   const nation = useMemo<Nation | null>(() => {
     if (!value) return null;
     try {
-      return JSON.parse(value) as Nation;
+      const n = JSON.parse(value) as Nation;
+      // Drop a stale pick that isn't a team in the current fixture (forces a fresh, aligned pick).
+      return NATIONS.some((x) => x.code === n.code) ? n : null;
     } catch {
       return null;
     }
