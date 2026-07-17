@@ -17,8 +17,10 @@ export function mintConfigured(): boolean {
 function getUmi(): Umi {
   if (umi) return umi;
   const rpc = process.env.HELIUS_RPC_URL as string;
-  const keyPath = (process.env.FEE_PAYER_KEYPAIR as string).replace('~', process.env.HOME ?? '');
-  const secret = new Uint8Array(JSON.parse(fs.readFileSync(keyPath, 'utf8')));
+  // Accept the fee-payer key as an inline JSON array (Vercel/Railway env) OR a file path (local).
+  const raw = (process.env.FEE_PAYER_KEYPAIR as string).trim();
+  const json = raw.startsWith('[') ? raw : fs.readFileSync(raw.replace('~', process.env.HOME ?? ''), 'utf8');
+  const secret = new Uint8Array(JSON.parse(json));
   const u = createUmi(rpc).use(mplBubblegum());
   u.use(keypairIdentity(u.eddsa.createKeypairFromSecretKey(secret)));
   umi = u;
