@@ -23,22 +23,25 @@ const DEFAULT_GAP_MS = 800;
 
 export class ReplaySource implements Source {
   readonly mode = 'replay' as const;
-  private readonly norm: Normalizer;
+  private norm: Normalizer;
   private readonly path: string;
   private readonly speed: number;
   private readonly maxGapMs: number;
+  private readonly loop: boolean;
   private stopped = false;
   private timer: NodeJS.Timeout | null = null;
 
   constructor(
     readonly fixtureId: number,
-    opts: { path?: string; speed?: number; maxGapMs?: number } = {},
+    opts: { path?: string; speed?: number; maxGapMs?: number; loop?: boolean } = {},
   ) {
     this.norm = new Normalizer(fixtureId);
     this.path = opts.path ?? process.env.REPLAY_PATH ?? `replay-${fixtureId}.jsonl`;
     this.speed = opts.speed ?? (Number(process.env.REPLAY_SPEED) || 1);
     // Clamp long dead gaps (e.g. 15s heartbeat spacing) so demos stay watchable.
     this.maxGapMs = opts.maxGapMs ?? (Number(process.env.REPLAY_MAX_GAP_MS) || 4000);
+    // Loop the arc so a deployed demo link never dead-ends (FR-D1).
+    this.loop = opts.loop ?? (process.env.REPLAY_LOOP === '1' || process.env.REPLAY_LOOP === 'true');
   }
 
   private async load(): Promise<Line[]> {
@@ -81,14 +84,20 @@ export class ReplaySource implements Source {
 
   async run(sink: Sink): Promise<void> {
     const lines = await this.load();
-    for (let i = 0; i < lines.length; i++) {
-      if (this.stopped) return;
-      const line = lines[i]!;
-      if (i > 0) await this.wait(Math.min(line.gapMs, this.maxGapMs) / this.speed);
-      if (this.stopped) return;
-      const events = line.stream === 'odds' ? this.norm.ingestOdds(line.raw) : this.norm.ingestScores(line.raw);
-      for (const ev of events) sink(ev);
-    }
+    do {
+      for (let i = 0; i < lines.length; i++) {
+        if (this.stopped) return;
+        const line = lines[i]!;
+        if (i > 0) await this.wait(Math.min(line.gapMs, this.maxGapMs) / this.speed);
+        if (this.stopped) return;
+        const events = line.stream === 'odds' ? this.norm.ingestOdds(line.raw) : this.norm.ingestScores(line.raw);
+        for (const ev of events) sink(ev);
+      }
+      if (this.loop && !this.stopped) {
+        await this.wait(2500); // brief breath, then replay the arc from a clean slate
+        this.norm = new Normalizer(this.fixtureId);
+      }
+    } while (this.loop && !this.stopped);
   }
 
   private wait(ms: number): Promise<void> {
