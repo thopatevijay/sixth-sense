@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MatchEvent, SurgeTick } from './relay';
 import type { Nation } from './nation';
 import { usePersistentRaw } from './store';
+import { PARTICIPANTS } from './config';
 
 export interface Moment {
   level: number;
@@ -92,7 +93,7 @@ export function useMomentTracker(
       swingDesc: describe(swingPct, nation?.name ?? 'your team', favouredUser),
       nation: nation?.name ?? 'World',
       flag: nation?.flag ?? '🌍',
-      match: 'France v Brazil',
+      match: `${PARTICIPANTS[1].name} v ${PARTICIPANTS[2].name}`,
       witnessedGoals,
     };
   }, [witnessedGoals, swingPct, nation]);
