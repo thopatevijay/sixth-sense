@@ -20,3 +20,6 @@ replay-*.jsonl
 .DS_Store
 *.log
 .vscode/
+
+# TxODDS captured match data — NOT redistributable (hackathon terms). Deployed to Railway via --no-gitignore.
+relay/fixtures/demo-arg-egy.jsonl
