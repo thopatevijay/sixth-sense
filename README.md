@@ -113,7 +113,8 @@ flowchart LR
 | Auth / wallet | Privy — invisible Solana wallet, gasless |
 | Real-time | Standalone Node SSE relay — Railway |
 | Data | Postgres — Railway |
-| On-chain | Solana · Anchor (devnet) · Metaplex Bubblegum v2 cNFT · Helius DAS |
+| On-chain | Solana (devnet) · Metaplex Bubblegum compressed NFT · Helius DAS |
+| Deploy | App → Vercel · Relay + Postgres → Railway |
 | Live data | TxLINE (TxODDS) — real-time soccer scores + consensus odds |
 
 ## TxLINE integration

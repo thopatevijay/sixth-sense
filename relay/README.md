@@ -60,9 +60,10 @@ Open `http://localhost:8787/` for the mode-agnostic test page.
 
 ## Status
 
-- **Engineering (Gate 1 plumbing): green** — 3 modes behind one contract, REPLAY deterministic,
-  fan-out shares one upstream across clients, verified by `npm run verify` + live SSE curl test.
-- **LIVE wiring:** compiles and mirrors the proven `scripts/txline-capture.mjs` SSE logic; gets its
-  first real exercise at Phase 0 (mainnet token) / the FR-L6 live capture.
-- **Open data gate (FR-L6):** whether `possibleEvent` fires with usable lead time is proven only by a
-  live in-play capture. The normalizer + capture pipeline are ready to measure it.
+- **All three modes verified.** `npm run verify` (mock + replay determinism + multi-source rules) and
+  `npx tsx verify-real.ts` (real capture) pass; deployed on Railway serving REPLAY in production.
+- **Normalizer handles the real TxLINE feed** — top-level `Action`, `possible` flags from
+  `Data:{Goal,Corner,Penalty}`, possession danger from the action name, goal dedup by score. Proven
+  against `fixtures/demo-arg-egy.jsonl` (Argentina 3–2 Egypt): 495 surge · 62 lookup · 4 goals.
+- **Multi-source LOOK-UP** fires from `possible` + sustained danger + sharp `Pct` swing (frequency-capped).
+- **REPLAY_LOOP=1** loops the arc so a deployed demo link never dead-ends.
