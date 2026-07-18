@@ -11,6 +11,13 @@ Built for the **TxODDS "Consumer & Fan Experiences"** track — World Cup 2026 (
 Powered by **TxLINE** live sports data + **Solana**. **This is not a betting product** — no stake, no
 odds to wager on, no payout. It predicts *events* ("look up, don't miss it"), never *outcomes*.
 
+### ▶️ Live demo: **https://sixth-sense-wc.vercel.app**
+
+Runs on a real captured live match (Argentina 3–2 Egypt) in REPLAY, so it works with no live game.
+Sign in with email → pick a team → feel the SURGE → a **named LOOK-UP fires before the goal** → mint a
+**real, DAS-verified** cNFT moment. See [TECH.md](./TECH.md) for the architecture + a real-match signal
+analysis, and [FEEDBACK.md](./FEEDBACK.md) for TxLINE API notes.
+
 ---
 
 ## The problem
@@ -45,6 +52,19 @@ sequenceDiagram
 ```
 
 The data predicts a *named human's* action before the broadcast does — that's the sixth sense.
+
+## Does it actually work? (real-match signal analysis)
+
+Measured on a **real mainnet capture** of the 2nd half of **Argentina 3–2 Egypt** (1,002 raw events),
+run through the exact relay code the app uses:
+
+- **495** SURGE ticks · **62** LOOK-UP signals across the half (33 sustained-danger · 26 possible-flag · 3 shot)
+- **4 goals** correctly deduped from repeated feed frames → the full 0–2 → **3–2** comeback
+- The **57.9′ goal was flagged ~3.1s early** by an imminent-event signal — the "precognition" moment
+
+**Honest framing:** `possibleEvent.Goal` is an imminent-*chance* flag (~1 in 4 goals is tightly
+flagged), **not** a goal predictor — which is exactly why LOOK-UP is a *drama detector, never a tip*,
+and fuses **three** signals so it stays meaningful all match. Full breakdown in [TECH.md](./TECH.md#4-signal-analysis--does-it-actually-work).
 
 ## Architecture
 
@@ -91,8 +111,8 @@ flowchart LR
 |---|---|
 | Frontend | Next.js (latest, App Router) · TypeScript · Tailwind · mobile-first PWA |
 | Auth / wallet | Privy — invisible Solana wallet, gasless |
-| Real-time | Standalone Node SSE relay (Railway/Fly/Render) |
-| Data | Postgres (Supabase/Neon) |
+| Real-time | Standalone Node SSE relay — Railway |
+| Data | Postgres — Railway |
 | On-chain | Solana · Anchor (devnet) · Metaplex Bubblegum v2 cNFT · Helius DAS |
 | Live data | TxLINE (TxODDS) — real-time soccer scores + consensus odds |
 
@@ -110,25 +130,42 @@ Endpoints consumed:
 ## Getting started
 
 ```bash
+# 0) TxLINE session (on-chain subscribe → activate; saves .txline-session.json)
 npm install
-cp .env.example .env          # fill in Privy / Helius / DATABASE_URL
+TX_NET=mainnet TX_KEYPAIR_PATH=~/wallet.json npm run auth   # mainnet = real-time stream
 
-# Authenticate with TxLINE (on-chain subscribe → activate; saves .txline-session.json)
-TX_NET=devnet TX_KEYPAIR_PATH=~/.config/solana/id.json npm run auth
+# 1) Relay — standalone Node SSE service (MOCK needs no services)
+cd relay && npm install && npm run dev        # :8787 ·  npm run verify for headless checks
 
-# Run the relay + app (see scripts once added)
-npm run relay                 # standalone Node SSE relay
-npm run dev                   # Next.js client
+# 2) App — Next.js PWA (new terminal)
+cd app && cp ../.env.example .env.local       # fill Privy / Helius / DATABASE_URL / relay URL
+npm install && npm run dev                    # :3000
 ```
 
-> Secrets (`.env`, `.txline-session.json`, keypairs) are gitignored — never commit them.
+Modes: `RELAY_DEFAULT_MODE=mock|replay|live`. The deployed demo runs `replay` against a bundled real
+capture. Secrets (`.env*`, `.txline-session.json`, keypairs) are gitignored — never commit them.
+
+## Monetization
+
+SIXTH SENSE is the consumer proof of a **B2B white-label signal layer**: broadcasters, streamers, and
+sportsbook-media (**TxODDS's own customers**) license the SURGE + LOOK-UP "switch to this match now"
+overlay to pull second-screen viewers back to the broadcast at the exact moment drama is about to
+happen. It's sold as a **tune-in upsell on top of data TxODDS already delivers** — no new sales motion.
+
+- **Comparable:** [LiveLike](https://livelike.com) sells interactive fan-engagement SDKs to
+  broadcasters and has raised **tens of millions** doing exactly this — proof rights-holders pay for
+  engagement layers. SIXTH SENSE's edge is the *predictive, named* moment, not just polls/overlays.
+- **The number:** the 2022 World Cup drew ~**5 billion** cumulative viewers; that attention leaks to
+  second screens. At a modest **$10–25K / month per broadcaster** plus tune-in rev-share, across
+  hundreds of national rights-holders and 104 matches, this is **seven-figure tournament ARR** — and it
+  **recurs every league season** (EPL, NFL, cricket, …), not just at a World Cup.
+- **Consumer funnel:** invisible-wallet onboarding + shareable verified Moments drive organic growth
+  and a season-long collectible identity that keeps fans coming back.
 
 ## Roadmap / future vision
 
-SIXTH SENSE is the consumer proof of a bigger product: a **white-label real-time fan-engagement layer**
-broadcasters and operators (TxODDS's own customers) can drop into any match, any sport — *"our signal
-tells your viewers the exact second to switch to this match."* Next: multi-sport, native push
-notifications, sponsor-branded moments, and a season-long collectible identity.
+Multi-sport (the signal engine is sport-agnostic), native push notifications, sponsor-branded moments,
+in-place cNFT level-up, and a leaderboard-driven fan identity across a whole tournament season.
 
 ## License
 
